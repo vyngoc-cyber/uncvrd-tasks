@@ -13,8 +13,20 @@ Working notes collected before the next round of changes. Not final.
 - Inline dropdowns in cells: job role, project, priority, assignee, HTC.
 - HTC in minutes/hours (15min, 30min, 1h15min).
 - Time in shows minutes logged (4min, 22min, 27min).
-- Yellow rows = today. Light blue rows at the bottom = unknown, ask Vy.
-- Bottom bar: "Show review tasks +594", "Show all active tasks +3".
+- Row colours (worked out from the counters 14 need + 5 nice = 19):
+  - Yellow = today + Need-to-have
+  - Light blue = today + Nice-to-have (listed after the yellow ones)
+  - White = active, not picked for today
+- WEEKLY tag as well as DAILY. "DL 6d" badge = deadline in 6 days.
+- Difficulty has 4 levels, picked from a dialog with descriptions:
+  - SIMP: less than 1h, usually 15min
+  - MOD: at least 1h but less than 2h30
+  - COMP: multiple hours, generally 3h to 5h
+  - SUPC: 6h or more, generally 8h
+- Bottom bar: "Show review tasks +594" / "Hide review tasks -594"; "Show all active tasks +3" / "Show only today's tasks -3".
+- Review view: tasks at 100%, Date complete column (26-11-05@2:00AM), sorted newest first, "Clear sort" button.
+- Side card: name, roles, status "Active" (green dot = punched in), Time logged 53min / 16h, Workload 136% (red bar when over 100%).
+- Counters: Need-to-have 14, Nice-to-have 5, Active 19 (= today's tasks), In review 594, All 616.
 
 ## Bulk selection toolbar (appears when rows are ticked)
 Shows "19 tasks - 1 selected", refresh, clear, then icons in this order:
@@ -26,7 +38,7 @@ Shows "19 tasks - 1 selected", refresh, clear, then icons in this order:
 6. Put on hold
 7. Change client
 8. (unknown, list icon)
-9. (unknown, duplicate icon)
+9. Duplicate task
 10. Delete (red)
 11. More (...)
 
@@ -57,7 +69,6 @@ Shows "19 tasks - 1 selected", refresh, clear, then icons in this order:
 - Notifications, apps grid, settings, avatar
 
 ## Open questions for Vy
-- What do the light blue rows mean?
 - What are TaskrGram A/B, Finance and Admin used for?
 - Priority scale: what do 1.0 vs 4.9 mean, and which labels map to which ranges?
 - Is "Client" separate from "Project" for UNCVRD?
