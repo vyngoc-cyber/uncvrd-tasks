@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Papa from "papaparse";
-import type { Difficulty, NewTask, Priority, Profile, Project } from "@/lib/types";
-import { projectPath } from "@/lib/util";
+import type { Difficulty, NewTask, Profile, Project, Tier } from "@/lib/types";
+import { parseHtc, projectPath } from "@/lib/util";
+import { Modal } from "./Dialogs";
 import { useStore } from "@/lib/store";
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
   onClose: () => void;
 }
 
-const FIELDS = ["title", "project", "job_role", "priority", "difficulty", "htc", "assignee", "notes"] as const;
+const FIELDS = ["title", "project", "job_role", "priority", "difficulty", "htc", "assignee", "notes", "tier"] as const;
 type Field = (typeof FIELDS)[number];
 
 const ALIASES: Record<string, Field> = {
@@ -24,7 +25,8 @@ const ALIASES: Record<string, Field> = {
   difficulty: "difficulty", diff: "difficulty",
   htc: "htc", hours: "htc", "hours to complete": "htc",
   assignee: "assignee", "assignee email": "assignee", assignee_email: "assignee", email: "assignee",
-  notes: "notes", note: "notes",
+  notes: "notes", note: "notes", description: "notes",
+  tier: "tier", "need/nice": "tier", type: "tier",
 };
 
 interface Parsed {
@@ -81,13 +83,22 @@ export function BatchImportModal({ defaultAssignee, projects, projectsById, onCl
         }
       }
 
-      const prRaw = get("priority").toLowerCase();
-      const priority: Priority = prRaw.startsWith("nice") ? "nice" : "need";
+      // priority column takes a number (1.0-4.9) or need/nice; tier column takes need/nice
+      const prRaw = get("priority").trim().toLowerCase().replace(",", ".");
+      const tierRaw = (get("tier") || (isNaN(Number(prRaw)) ? prRaw : "")).toLowerCase();
+      const tier: Tier = tierRaw.startsWith("nice") ? "nice" : "need";
+      let priority = 3;
+      if (prRaw && !isNaN(Number(prRaw))) {
+        priority = Number(prRaw);
+        if (priority < 1 || priority > 4.9) {
+          problems.push("priority must be 1.0-4.9");
+          priority = 3;
+        }
+      }
       const dRaw = get("difficulty").toUpperCase();
-      const difficulty: Difficulty = dRaw.startsWith("MOD") ? "MOD" : "SIMP";
-      const htcRaw = get("htc").replace(/h$/i, "");
-      const htc = htcRaw === "" ? null : Number(htcRaw);
-      if (htc !== null && isNaN(htc)) problems.push("HTC is not a number");
+      const difficulty: Difficulty = (["SIMP", "MOD", "COMP", "SUPC"] as const).find((d) => dRaw.startsWith(d)) ?? "SIMP";
+      const htc = parseHtc(get("htc"));
+      if (htc !== null && isNaN(htc)) problems.push("HTC not understood");
 
       let assignee = defaultAssignee;
       const aRaw = get("assignee").toLowerCase();
@@ -102,7 +113,8 @@ export function BatchImportModal({ defaultAssignee, projects, projectsById, onCl
           title,
           project_id,
           job_role: get("job_role") || assignee.job_role || null,
-          priority,
+          priority: Math.round(priority * 10) / 10,
+          tier,
           difficulty,
           htc: htc !== null && isNaN(htc) ? null : htc,
           assignee_id: assignee.id,
@@ -135,13 +147,12 @@ export function BatchImportModal({ defaultAssignee, projects, projectsById, onCl
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Batch import">
-        <h2>Batch import</h2>
+    <Modal title="Batch import" onClose={onClose} wide>
+      <div className="stack">
         <p style={{ margin: 0, color: "var(--text-2)" }}>
           Paste rows from a spreadsheet or upload a CSV. Columns in this order, or use a header row:
           <br />
-          <code>title, project, job role, priority, difficulty, HTC, assignee email, notes</code>
+          <code>title, project, job role, priority (1.0-4.9 or need/nice), difficulty, HTC (e.g. 15min, 1h30), assignee email, description</code>
         </p>
         <textarea className="textarea" style={{ minHeight: 140, fontFamily: "ui-monospace, monospace", fontSize: 12 }}
           placeholder={"Design TAC monthly issue\tTAC Fulfillment \\ TAC Monthly Issue\tGraphic Design\tNeed\tSIMP\t2"}
@@ -164,7 +175,7 @@ export function BatchImportModal({ defaultAssignee, projects, projectsById, onCl
                     <td>{r.task.title}</td>
                     <td>{r.projectLabel}</td>
                     <td>{r.task.job_role}</td>
-                    <td>{r.task.priority === "need" ? "Need" : "Nice"}</td>
+                    <td>{r.task.priority?.toFixed(1)} {r.task.tier === "nice" ? "Nice" : "Need"}</td>
                     <td>{r.task.difficulty}</td>
                     <td>{r.task.htc ?? ""}</td>
                     <td>{r.assigneeLabel}</td>
@@ -188,7 +199,7 @@ export function BatchImportModal({ defaultAssignee, projects, projectsById, onCl
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

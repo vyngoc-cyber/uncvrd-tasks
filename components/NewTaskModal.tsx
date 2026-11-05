@@ -1,52 +1,57 @@
 "use client";
 
 import { useState } from "react";
-import type { Difficulty, Priority, Profile, Project } from "@/lib/types";
-import { projectPath } from "@/lib/util";
+import type { Difficulty, Profile, Repeat, Tier } from "@/lib/types";
+import { DIFFICULTIES, HTC_PRESETS, REPEAT_LABEL, fmtHours, priorityLabel } from "@/lib/util";
 import { useStore } from "@/lib/store";
+import { Modal } from "./Dialogs";
 
 interface Props {
   defaultAssignee: Profile;
-  projects: Project[];
-  projectsById: Map<string, Project>;
+  projectOptions: { id: string; path: string }[];
   onClose: () => void;
 }
 
-export function NewTaskModal({ defaultAssignee, projects, projectsById, onClose }: Props) {
-  const { me, profiles, createTasks, pushToast } = useStore();
+export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props) {
+  const { me, profiles, clients, createTasks, pushToast } = useStore();
   const [title, setTitle] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [jobRole, setJobRole] = useState(defaultAssignee.job_role ?? "");
-  const [assignee, setAssignee] = useState(defaultAssignee.id);
-  const [priority, setPriority] = useState<Priority>("need");
-  const [difficulty, setDifficulty] = useState<Difficulty>("SIMP");
-  const [htc, setHtc] = useState("");
   const [notes, setNotes] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [jobRole, setJobRole] = useState(defaultAssignee.job_role?.split(",")[0]?.trim() ?? "");
+  const [assignee, setAssignee] = useState(defaultAssignee.id);
+  const [priority, setPriority] = useState("3.0");
+  const [tier, setTier] = useState<Tier>("need");
+  const [difficulty, setDifficulty] = useState<Difficulty>("SIMP");
+  const [htc, setHtc] = useState("0.25");
+  const [repeat, setRepeat] = useState<Repeat>("none");
+  const [due, setDue] = useState("");
   const [today, setToday] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const opts = projects
-    .filter((x) => !x.archived)
-    .map((x) => ({ id: x.id, path: projectPath(x.id, projectsById) }))
-    .sort((a, b) => a.path.localeCompare(b.path));
+  const prio = Number(priority.replace(",", "."));
+  const prioOk = !isNaN(prio) && prio >= 1 && prio <= 4.9;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !prioOk) return;
     setBusy(true);
-    const n = await createTasks([
-      {
-        title: title.trim(),
-        project_id: projectId || null,
-        job_role: jobRole.trim() || null,
-        assignee_id: assignee,
-        priority,
-        difficulty,
-        htc: htc === "" ? null : Number(htc),
-        notes: notes.trim() || null,
-        status: today ? "today" : "active",
-      },
-    ]);
+    const n = await createTasks([{
+      title: title.trim(),
+      notes: notes.trim() || null,
+      project_id: projectId || null,
+      client_id: clientId || null,
+      job_role: jobRole.trim() || null,
+      assignee_id: assignee,
+      priority: Math.round(prio * 10) / 10,
+      tier,
+      difficulty,
+      htc: htc === "" ? null : Number(htc),
+      repeat,
+      due_date: due || null,
+      start_date: repeat !== "none" ? due || null : null,
+      status: today ? "today" : "active",
+    }]);
     setBusy(false);
     if (n) {
       pushToast({ message: "Task created" });
@@ -55,65 +60,90 @@ export function NewTaskModal({ defaultAssignee, projects, projectsById, onClose 
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit} aria-label="New task">
-        <h2>New task</h2>
+    <Modal title="New task" onClose={onClose}>
+      <form onSubmit={submit} className="stack">
         <div className="field">
           <label htmlFor="n-title">Title</label>
-          <input id="n-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required />
+          <input id="n-title" className="input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required />
         </div>
         <div className="field">
-          <label htmlFor="n-proj">Project</label>
-          <select id="n-proj" className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">None</option>
-            {opts.map((o) => <option key={o.id} value={o.id}>{o.path}</option>)}
-          </select>
+          <label htmlFor="n-notes">Description</label>
+          <textarea id="n-notes" className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="two">
           <div className="field">
-            <label htmlFor="n-role">Job role</label>
+            <label htmlFor="n-proj">Project</label>
+            <select id="n-proj" className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <option value="">None</option>
+              {projectOptions.map((o) => <option key={o.id} value={o.id}>{o.path}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="n-client">Client</label>
+            <select id="n-client" className="select" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+              <option value="">None</option>
+              {clients.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="n-role">Area (job role)</label>
             <input id="n-role" className="input" value={jobRole} onChange={(e) => setJobRole(e.target.value)} />
           </div>
+          {me?.is_manager ? (
+            <div className="field">
+              <label htmlFor="n-asg">Assignee</label>
+              <select id="n-asg" className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                {profiles.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          ) : <div />}
           <div className="field">
-            <label htmlFor="n-htc">HTC (hours)</label>
-            <input id="n-htc" className="input" type="number" min={0} step={0.5} value={htc} onChange={(e) => setHtc(e.target.value)} />
+            <label htmlFor="n-prio">Priority (1.0 - 4.9)</label>
+            <input id="n-prio" className="input" inputMode="decimal" value={priority} onChange={(e) => setPriority(e.target.value)} />
+            <span className="band">{prioOk ? priorityLabel(prio) : "Enter 1.0 to 4.9"}</span>
           </div>
           <div className="field">
-            <label htmlFor="n-prio">Priority</label>
-            <select id="n-prio" className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
-              <option value="need">Need-to-have</option>
-              <option value="nice">Nice-to-have</option>
+            <label htmlFor="n-diff">Complexity</label>
+            <select id="n-diff" className="select" value={difficulty}
+              onChange={(e) => {
+                const d = e.target.value as Difficulty;
+                setDifficulty(d);
+                setHtc(String(DIFFICULTIES.find((x) => x.value === d)!.hours));
+              }}>
+              {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.value}: {d.text.replace("Tasks that take ", "")}</option>)}
             </select>
           </div>
           <div className="field">
-            <label htmlFor="n-diff">Difficulty</label>
-            <select id="n-diff" className="select" value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)}>
-              <option value="SIMP">SIMP</option>
-              <option value="MOD">MOD</option>
+            <label htmlFor="n-htc">HTC</label>
+            <select id="n-htc" className="select" value={htc} onChange={(e) => setHtc(e.target.value)}>
+              <option value="">–</option>
+              {HTC_PRESETS.map((h) => <option key={h} value={h}>{fmtHours(h)}</option>)}
             </select>
+          </div>
+          <div className="field">
+            <label htmlFor="n-rep">Repeat</label>
+            <select id="n-rep" className="select" value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+              {(Object.keys(REPEAT_LABEL) as Repeat[]).map((r) => <option key={r} value={r}>{REPEAT_LABEL[r]}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="n-due">Due date</label>
+            <input id="n-due" className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </div>
         </div>
-        {me?.is_manager && (
-          <div className="field">
-            <label htmlFor="n-asg">Assignee</label>
-            <select id="n-asg" className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              {profiles.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </div>
-        )}
-        <div className="field">
-          <label htmlFor="n-notes">Notes</label>
-          <textarea id="n-notes" className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <div className="tier-toggle" role="radiogroup" aria-label="Need or nice to have">
+          <button type="button" role="radio" aria-checked={tier === "need"} className={tier === "need" ? "on" : ""} onClick={() => setTier("need")}>Need-to-have</button>
+          <button type="button" role="radio" aria-checked={tier === "nice"} className={tier === "nice" ? "on" : ""} onClick={() => setTier("nice")}>Nice-to-have</button>
         </div>
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <label className="check">
           <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} />
           Work on it today
         </label>
         <div className="modal-foot">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !title.trim()}>Create task</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !title.trim() || !prioOk}>Create task</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

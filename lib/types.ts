@@ -1,6 +1,7 @@
-export type TaskStatus = "active" | "today" | "review" | "done";
-export type Priority = "need" | "nice";
-export type Difficulty = "SIMP" | "MOD";
+export type TaskStatus = "active" | "today" | "hold" | "review" | "done";
+export type Tier = "need" | "nice";
+export type Difficulty = "SIMP" | "MOD" | "COMP" | "SUPC";
+export type Repeat = "none" | "daily" | "weekly" | "monthly";
 
 export interface Profile {
   id: string;
@@ -18,19 +19,33 @@ export interface Project {
   archived: boolean;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  archived: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
   project_id: string | null;
+  client_id: string | null;
   job_role: string | null;
   assignee_id: string | null;
   created_by: string | null;
-  priority: Priority;
+  tier: Tier;
+  priority: number;
   difficulty: Difficulty;
   htc: number | null;
   progress: number;
   status: TaskStatus;
   notes: string | null;
+  start_date: string | null;
+  due_date: string | null;
+  repeat: Repeat;
+  explanation_url: string | null;
+  sort_order: number;
+  spawned_from: string | null;
   created_at: string;
   updated_at: string;
   today_at: string | null;
@@ -41,6 +56,14 @@ export interface TimeLog {
   id: string;
   task_id: string;
   user_id: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface Attendance {
+  id: string;
+  user_id: string;
+  kind: "work" | "break";
   started_at: string;
   ended_at: string | null;
 }
