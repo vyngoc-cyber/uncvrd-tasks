@@ -8,6 +8,7 @@ import { TaskTable, type SortKey, type SortState } from "@/components/TaskTable"
 import { TaskDetail } from "@/components/TaskDetail";
 import { NewTaskModal } from "@/components/NewTaskModal";
 import { BatchImportModal } from "@/components/BatchImportModal";
+import { IconButton } from "@/components/Icons";
 import { ChoiceDialog, DifficultyDialog, PriorityDialog, ProgressDialog } from "@/components/Dialogs";
 import { WORKDAY_HOURS, fmtDuration, fmtHours, initials, logMs, projectPath, startOfToday } from "@/lib/util";
 
@@ -114,7 +115,8 @@ function MyDay() {
       }
       if (groupOf(a) !== groupOf(b)) return groupOf(a) - groupOf(b);
       if (a.status === "review") return (b.completed_at ?? "").localeCompare(a.completed_at ?? "");
-      return a.sort_order - b.sort_order || a.priority - b.priority;
+      // within a colour band: most urgent priority (lowest number) first, then manual order
+      return a.priority - b.priority || a.sort_order - b.sort_order;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, target.id, showActive, showHold, showReview, tierFilter, query, sort, projectsById, profilesById, timeByTask]);
@@ -171,8 +173,11 @@ function MyDay() {
     const target = list[i]!;
     const neighbour = before ? list[i - 1] : list[i + 1];
     const tOrder = target.sort_order;
-    const nOrder = neighbour && groupOf(neighbour) === groupOf(target) ? neighbour.sort_order : before ? tOrder - 1 : tOrder + 1;
+    const sameSlot = (x: Task | undefined) => !!x && groupOf(x) === groupOf(target) && x.priority === target.priority;
+    const nOrder = sameSlot(neighbour) ? neighbour!.sort_order : before ? tOrder - 1 : tOrder + 1;
     const patch: Partial<Task> = { sort_order: (tOrder + nOrder) / 2 };
+    // the list is ordered by priority, so dropping next to a task takes on its priority
+    if (dragged.priority !== target.priority) patch.priority = target.priority;
     // dragging into another colour band changes the task to match it
     if (groupOf(dragged) !== groupOf(target)) {
       if (target.status === "today") Object.assign(patch, { status: "today", tier: target.tier, ...(dragged.status !== "today" ? { today_at: new Date().toISOString() } : {}) });
@@ -319,23 +324,23 @@ function MyDay() {
           ) : (
             <div className="bulk" role="toolbar" aria-label="Actions for selected tasks">
               <span className="count">{selected.size} selected</span>
-              <button className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>Clear</button>
+              <IconButton icon="x" label="Clear selection" onClick={() => setSelected(new Set())} />
               <span className="sep" />
-              {selected.size === 1 && <button className="btn btn-sm" onClick={() => setOpenId(sel[0]!)}>Edit</button>}
-              {anyStatus("today") && <button className="btn btn-sm" onClick={bulk.stop}>Stop working on</button>}
-              {!allClosed && <button className="btn btn-sm" onClick={() => setDialog({ kind: "progress", ids: sel, initial: selTasks[0]?.progress ?? 0 })}>Status %</button>}
-              <button className="btn btn-sm" onClick={bulk.need}>Need-to-have</button>
-              <button className="btn btn-sm" onClick={bulk.nice}>Nice-to-have</button>
-              {anyStatus("active", "today") && <button className="btn btn-sm" onClick={bulk.hold}>Put on hold</button>}
-              {anyStatus("hold") && <button className="btn btn-sm" onClick={bulk.resume}>Resume</button>}
-              <button className="btn btn-sm" onClick={() => setDialog({ kind: "priority", ids: sel, initial: selTasks[0]?.priority ?? 3 })}>Priority</button>
-              <button className="btn btn-sm" onClick={() => setDialog({ kind: "difficulty", ids: sel, initial: selTasks.length === 1 ? selTasks[0]!.difficulty : null })}>Difficulty</button>
-              <button className="btn btn-sm" onClick={() => setDialog({ kind: "client", ids: sel })}>Client</button>
-              <button className="btn btn-sm" onClick={bulk.duplicate}>Duplicate</button>
-              {!allClosed && <button className="btn btn-sm btn-primary" onClick={() => complete(sel)}>{isManager ? "Done" : "Send to review"}</button>}
-              {isManager && anyStatus("review") && <button className="btn btn-sm btn-primary" onClick={bulk.approve}>Approve</button>}
-              {anyStatus("review", "done") && <button className="btn btn-sm" onClick={bulk.reopen}>Reopen</button>}
-              <button className="btn btn-sm btn-danger" onClick={bulk.remove}>Delete</button>
+              {selected.size === 1 && <IconButton icon="edit" label="Edit" onClick={() => setOpenId(sel[0]!)} />}
+              {anyStatus("today") && <IconButton icon="pause" label="Stop working on" onClick={bulk.stop} />}
+              {!allClosed && <IconButton icon="percent" label="Update status %" onClick={() => setDialog({ kind: "progress", ids: sel, initial: selTasks[0]?.progress ?? 0 })} />}
+              <IconButton icon="need" label="Mark need-to-have" onClick={bulk.need} />
+              <IconButton icon="nice" label="Mark nice-to-have" onClick={bulk.nice} />
+              {anyStatus("active", "today") && <IconButton icon="hold" label="Put on hold" onClick={bulk.hold} />}
+              {anyStatus("hold") && <IconButton icon="play" label="Resume" onClick={bulk.resume} />}
+              <IconButton icon="flag" label="Change priority" onClick={() => setDialog({ kind: "priority", ids: sel, initial: selTasks[0]?.priority ?? 3 })} />
+              <IconButton icon="gauge" label="Change difficulty" onClick={() => setDialog({ kind: "difficulty", ids: sel, initial: selTasks.length === 1 ? selTasks[0]!.difficulty : null })} />
+              <IconButton icon="client" label="Change client" onClick={() => setDialog({ kind: "client", ids: sel })} />
+              <IconButton icon="copy" label="Duplicate" onClick={bulk.duplicate} />
+              {!allClosed && <IconButton icon="check" tone="primary" label={isManager ? "Mark done" : "Send to review"} onClick={() => complete(sel)} />}
+              {isManager && anyStatus("review") && <IconButton icon="approve" tone="primary" label="Approve" onClick={bulk.approve} />}
+              {anyStatus("review", "done") && <IconButton icon="reopen" label="Reopen" onClick={bulk.reopen} />}
+              <IconButton icon="trash" tone="danger" label="Delete" onClick={bulk.remove} />
             </div>
           )}
           {selected.size === 0 && <label className="search">
