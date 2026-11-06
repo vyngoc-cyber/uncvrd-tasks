@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Profile, Task } from "@/lib/types";
-import { HTC_PRESETS, carriedFrom, deadlineBadge, fmtDateTime, fmtDuration, fmtHours } from "@/lib/util";
+import { HTC_PRESETS, PROGRESS_STATE_LABEL, carriedFrom, progressState, deadlineBadge, fmtDateTime, fmtDuration, fmtHours } from "@/lib/util";
 
 export type SortKey = "title" | "progress" | "job_role" | "project" | "priority" | "difficulty" | "assignee" | "time" | "htc" | "completed_at";
 export interface SortState {
@@ -193,9 +193,10 @@ function Row({ t, p, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onD
       <div className="cell c-prog progress" role="cell" onClick={stop}>
         <input
           type="range" min={0} max={100} step={5} value={prog} disabled={closed}
-          className={prog > 0 && prog < 100 ? "partial" : ""}
+          className={`pstate-${progressState(t, prog, running)}`}
+          title={PROGRESS_STATE_LABEL[progressState(t, prog, running)]}
           style={{ ["--pct" as string]: `${prog}%` }}
-          aria-label={`Progress for ${t.title}`}
+          aria-label={`Progress for ${t.title}, ${PROGRESS_STATE_LABEL[progressState(t, prog, running)]}`}
           onChange={(e) => setProg(Number(e.target.value))}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit}
         />

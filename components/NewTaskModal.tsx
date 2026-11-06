@@ -21,12 +21,11 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
   const [jobRole, setJobRole] = useState(defaultAssignee.job_role?.split(",")[0]?.trim() ?? "");
   const [assignee, setAssignee] = useState(defaultAssignee.id);
   const [priority, setPriority] = useState("3.0");
-  const [tier, setTier] = useState<Tier>("need");
+  const [tier, setTier] = useState<Tier | "later">("need");
   const [difficulty, setDifficulty] = useState<Difficulty>("SIMP");
   const [htc, setHtc] = useState("0.25");
   const [repeat, setRepeat] = useState<Repeat>("none");
   const [due, setDue] = useState("");
-  const [today, setToday] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const prio = Number(priority.replace(",", "."));
@@ -44,13 +43,13 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
       job_role: jobRole.trim() || null,
       assignee_id: assignee,
       priority: Math.round(prio * 10) / 10,
-      tier,
+      tier: tier === "later" ? "need" : tier,
       difficulty,
       htc: htc === "" ? null : Number(htc),
       repeat,
       due_date: due || null,
       start_date: repeat !== "none" ? due || null : null,
-      status: today ? "today" : "active",
+      status: tier === "later" ? "active" : "today",
     }]);
     setBusy(false);
     if (n) {
@@ -131,14 +130,14 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
             <input id="n-due" className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </div>
         </div>
-        <div className="tier-toggle" role="radiogroup" aria-label="Need or nice to have">
-          <button type="button" role="radio" aria-checked={tier === "need"} className={tier === "need" ? "on" : ""} onClick={() => setTier("need")}>Need-to-have</button>
-          <button type="button" role="radio" aria-checked={tier === "nice"} className={tier === "nice" ? "on" : ""} onClick={() => setTier("nice")}>Nice-to-have</button>
+        <div className="field">
+          <label>Add to</label>
+          <div className="tier-toggle three" role="radiogroup" aria-label="Where this task goes">
+            {([["need", "Need-to-have"], ["nice", "Nice-to-have"], ["later", "Later (active list)"]] as const).map(([v, label]) => (
+              <button key={v} type="button" role="radio" aria-checked={tier === v} className={tier === v ? "on" : ""} onClick={() => setTier(v)}>{label}</button>
+            ))}
+          </div>
         </div>
-        <label className="check">
-          <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} />
-          Work on it today
-        </label>
         <div className="modal-foot">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={busy || !title.trim() || !prioOk}>Create task</button>

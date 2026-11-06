@@ -2,6 +2,21 @@ import type { Difficulty, Project, Repeat, Task, TimeLog } from "./types";
 
 export const WORKDAY_HOURS = 8;
 
+/** Colour state of the progress thumb: not started, being worked on now, started but paused, finished. */
+export type ProgressState = "idle" | "running" | "paused" | "done";
+export function progressState(t: Task, progress: number, running: boolean): ProgressState {
+  if (t.status === "review" || t.status === "done" || progress >= 100) return "done";
+  if (running) return "running";
+  if (progress > 0) return "paused";
+  return "idle";
+}
+export const PROGRESS_STATE_LABEL: Record<ProgressState, string> = {
+  idle: "Not started",
+  running: "Working on it now",
+  paused: "Started, paused",
+  done: "Finished",
+};
+
 export const PRIORITY_BANDS = [
   { value: 1, label: "Game over" },
   { value: 2, label: "Major loss" },

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Client, Difficulty, Profile, Repeat, Task } from "@/lib/types";
-import { DIFFICULTIES, HTC_PRESETS, REPEAT_LABEL, carriedFrom, fmtDateTime, fmtHours, priorityLabel } from "@/lib/util";
+import { DIFFICULTIES, HTC_PRESETS, PROGRESS_STATE_LABEL, REPEAT_LABEL, carriedFrom, progressState, fmtDateTime, fmtHours, priorityLabel } from "@/lib/util";
 import { useStore } from "@/lib/store";
 
 interface Props {
@@ -34,6 +34,10 @@ export function TaskDetail({ task: t, ...p }: Props) {
   const closed = t.status === "review" || t.status === "done";
   const assigner = t.created_by ? p.profilesById.get(t.created_by)?.name : null;
   const clientName = t.client_id ? p.clients.find((c) => c.id === t.client_id)?.name : null;
+  // Need/Nice-to-have = put it on today's list in that band
+  const setTier = (tier: Task["tier"]) =>
+    save(t.status === "active" || t.status === "hold" ? { tier, status: "today", today_at: new Date().toISOString() } : { tier });
+  const pstate = progressState(t, draft.progress, p.running);
 
   return (
     <section className="detail" aria-label="Task details">
@@ -141,6 +145,7 @@ export function TaskDetail({ task: t, ...p }: Props) {
 
       <Field label={`Status ${draft.progress}%`} htmlFor="d-prog">
         <input id="d-prog" type="range" min={0} max={100} step={5} value={draft.progress} disabled={closed}
+          className={`pstate-${pstate}`} title={PROGRESS_STATE_LABEL[pstate]}
           style={{ ["--pct" as string]: `${draft.progress}%` }}
           onChange={(e) => setDraft({ ...draft, progress: Number(e.target.value) })}
           onPointerUp={() => (draft.progress >= 100 ? p.onComplete(t) : save({ progress: draft.progress }))}
@@ -148,8 +153,8 @@ export function TaskDetail({ task: t, ...p }: Props) {
       </Field>
 
       <div className="tier-toggle" role="radiogroup" aria-label="Need or nice to have">
-        <button role="radio" aria-checked={t.tier === "need"} className={t.tier === "need" ? "on" : ""} onClick={() => save({ tier: "need" })}>Need-to-have</button>
-        <button role="radio" aria-checked={t.tier === "nice"} className={t.tier === "nice" ? "on" : ""} onClick={() => save({ tier: "nice" })}>Nice-to-have</button>
+        <button role="radio" aria-checked={t.status === "today" && t.tier === "need"} className={t.status === "today" && t.tier === "need" ? "on" : ""} onClick={() => setTier("need")}>Need-to-have</button>
+        <button role="radio" aria-checked={t.status === "today" && t.tier === "nice"} className={t.status === "today" && t.tier === "nice" ? "on" : ""} onClick={() => setTier("nice")}>Nice-to-have</button>
       </div>
 
       <div className="meta">
@@ -164,7 +169,6 @@ export function TaskDetail({ task: t, ...p }: Props) {
             ? <button className="btn" onClick={() => stopTimer()}>Stop timer</button>
             : <button className="btn" onClick={() => startTimer(t.id)}>Start timer</button>
         )}
-        {t.status === "active" && <button className="btn" onClick={() => save({ status: "today", today_at: new Date().toISOString() })}>Work on today</button>}
         {t.status === "today" && <button className="btn" onClick={() => save({ status: "active", today_at: null })}>Stop working on</button>}
         {t.status === "hold" && <button className="btn" onClick={() => save({ status: "active" })}>Resume</button>}
         {t.status === "review" && p.isManager && <button className="btn" onClick={() => save({ status: "done" })}>Approve</button>}

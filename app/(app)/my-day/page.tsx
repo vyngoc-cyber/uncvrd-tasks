@@ -198,13 +198,19 @@ function MyDay() {
   const sel = [...selected];
   const selTasks = rows.filter((r) => selected.has(r.id));
   const nowIso = () => new Date().toISOString();
+  async function setTier(tier: Tier) {
+    const waiting = selTasks.filter((t) => t.status === "active" || t.status === "hold").map((t) => t.id);
+    const rest = sel.filter((id) => !waiting.includes(id));
+    if (waiting.length) await updateTasks(waiting, { tier, status: "today", today_at: nowIso() });
+    if (rest.length) await updateTasks(rest, { tier });
+  }
   const bulk = {
-    today: () => updateTasks(sel, { status: "today", today_at: nowIso() }),
     stop: () => updateTasks(sel, { status: "active", today_at: null }),
     hold: () => updateTasks(sel, { status: "hold", today_at: null }),
     resume: () => updateTasks(sel, { status: "active" }),
-    need: () => updateTasks(sel, { tier: "need" }),
-    nice: () => updateTasks(sel, { tier: "nice" }),
+    // Need/Nice-to-have also puts active or on-hold tasks onto today's list
+    need: () => setTier("need"),
+    nice: () => setTier("nice"),
     approve: () => updateTasks(sel, { status: "done" }),
     reopen: () => updateTasks(sel, { status: "active", completed_at: null, progress: 90 }),
     duplicate: () => duplicateTasks(sel),
@@ -316,7 +322,6 @@ function MyDay() {
               <button className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>Clear</button>
               <span className="sep" />
               {selected.size === 1 && <button className="btn btn-sm" onClick={() => setOpenId(sel[0]!)}>Edit</button>}
-              {anyStatus("active", "hold") && <button className="btn btn-sm" onClick={bulk.today}>Work on today</button>}
               {anyStatus("today") && <button className="btn btn-sm" onClick={bulk.stop}>Stop working on</button>}
               {!allClosed && <button className="btn btn-sm" onClick={() => setDialog({ kind: "progress", ids: sel, initial: selTasks[0]?.progress ?? 0 })}>Status %</button>}
               <button className="btn btn-sm" onClick={bulk.need}>Need-to-have</button>
