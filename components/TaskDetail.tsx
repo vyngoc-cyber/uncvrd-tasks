@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Client, Difficulty, Profile, Repeat, Task } from "@/lib/types";
 import { DIFFICULTIES, HTC_PRESETS, PROGRESS_STATE_LABEL, REPEAT_LABEL, carriedFrom, progressState, fmtDateTime, fmtHours, priorityLabel } from "@/lib/util";
 import { useStore } from "@/lib/store";
+import { aiResultToPatch, requestAiFill } from "@/lib/ai";
 
 interface Props {
   task: Task;
@@ -22,7 +23,8 @@ interface Props {
 }
 
 export function TaskDetail({ task: t, ...p }: Props) {
-  const { updateTask, startTimer, stopTimer } = useStore();
+  const { updateTask, startTimer, stopTimer, pushToast } = useStore();
+  const [aiBusy, setAiBusy] = useState(false);
   const [draft, setDraft] = useState(t);
   useEffect(() => setDraft(t), [t]);
 
@@ -39,6 +41,35 @@ export function TaskDetail({ task: t, ...p }: Props) {
     save(t.status === "active" || t.status === "hold" ? { tier, status: "today", today_at: new Date().toISOString() } : { tier });
   const pstate = progressState(t, draft.progress, p.running);
 
+  async function fillWithAi() {
+    const description = (draft.notes ?? "").trim();
+    if (description.length < 3) {
+      pushToast({ message: "Write a description first, then let AI fill the rest.", tone: "error" });
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const r = await requestAiFill(description, {
+        projects: p.projectOptions.map((o) => ({ id: o.id, label: o.path })),
+        clients: p.clients.filter((c) => !c.archived).map((c) => ({ id: c.id, label: c.name })),
+        people: p.isManager ? p.profiles.map((u) => ({ id: u.id, label: `${u.name}${u.job_role ? `, ${u.job_role}` : ""}` })) : [],
+      });
+      const patch: Partial<Task> = { ...aiResultToPatch(r, { canAssign: p.isManager }), notes: description };
+      const before: Partial<Task> = {};
+      for (const k of Object.keys(patch) as (keyof Task)[]) (before as Record<string, unknown>)[k] = t[k];
+      await updateTask(t.id, patch);
+      pushToast({
+        message: r.summary || "AI filled in the task details.",
+        ttl: 8000,
+        action: { label: "Undo", run: () => updateTask(t.id, before) },
+      });
+    } catch (e) {
+      pushToast({ message: e instanceof Error ? e.message : "AI request failed.", tone: "error", ttl: 8000 });
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <section className="detail" aria-label="Task details">
       <div className="detail-head">
@@ -51,6 +82,11 @@ export function TaskDetail({ task: t, ...p }: Props) {
         <textarea id="d-notes" className="textarea" value={draft.notes ?? ""} placeholder="What needs to happen, links, context…"
           onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
           onBlur={() => save({ notes: draft.notes?.trim() || null })} />
+        <button type="button" className="btn btn-sm ai-btn" onClick={fillWithAi} disabled={aiBusy || closed}
+          title="AI reads the description and fills title, project, priority, difficulty, HTC, due date and more">
+          {aiBusy ? <span className="spinner" aria-hidden="true" /> : <span aria-hidden="true">✦</span>}
+          {aiBusy ? "Reading description…" : "Fill details with AI"}
+        </button>
       </Field>
 
       <Field label="Title" htmlFor="d-title" aside={`${draft.title.length}/80`}>

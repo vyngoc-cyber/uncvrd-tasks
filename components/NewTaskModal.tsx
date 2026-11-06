@@ -5,6 +5,7 @@ import type { Difficulty, Profile, Repeat, Tier } from "@/lib/types";
 import { DIFFICULTIES, HTC_PRESETS, REPEAT_LABEL, fmtHours, priorityLabel } from "@/lib/util";
 import { useStore } from "@/lib/store";
 import { Modal } from "./Dialogs";
+import { requestAiFill } from "@/lib/ai";
 
 interface Props {
   defaultAssignee: Profile;
@@ -27,6 +28,37 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
   const [repeat, setRepeat] = useState<Repeat>("none");
   const [due, setDue] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+
+  async function fillWithAi() {
+    if (notes.trim().length < 3) return;
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const r = await requestAiFill(notes.trim(), {
+        projects: projectOptions.map((o) => ({ id: o.id, label: o.path })),
+        clients: clients.filter((c) => !c.archived).map((c) => ({ id: c.id, label: c.name })),
+        people: me?.is_manager ? profiles.map((u) => ({ id: u.id, label: `${u.name}${u.job_role ? `, ${u.job_role}` : ""}` })) : [],
+      });
+      if (r.title) setTitle(r.title);
+      if (r.job_role) setJobRole(r.job_role);
+      if (r.project_id) setProjectId(r.project_id);
+      if (r.client_id) setClientId(r.client_id);
+      if (me?.is_manager && r.assignee_id) setAssignee(r.assignee_id);
+      setPriority(r.priority.toFixed(1));
+      setTier(r.tier);
+      setDifficulty(r.difficulty);
+      setHtc(String(Math.round((r.htc_minutes / 60) * 100) / 100));
+      setRepeat(r.repeat);
+      if (r.due_date) setDue(r.due_date);
+      setAiNote(r.summary || "Filled in. Check the fields before creating.");
+    } catch (e) {
+      setAiNote(e instanceof Error ? e.message : "AI request failed.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   const prio = Number(priority.replace(",", "."));
   const prioOk = !isNaN(prio) && prio >= 1 && prio <= 4.9;
@@ -62,12 +94,19 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
     <Modal title="New task" onClose={onClose}>
       <form onSubmit={submit} className="stack">
         <div className="field">
-          <label htmlFor="n-title">Title</label>
-          <input id="n-title" className="input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required />
+          <label htmlFor="n-notes">Description</label>
+          <textarea id="n-notes" className="textarea" value={notes} autoFocus
+            placeholder="Describe the task in your own words (English or Vietnamese), then let AI fill the fields."
+            onChange={(e) => setNotes(e.target.value)} />
+          <button type="button" className="btn btn-sm ai-btn" onClick={fillWithAi} disabled={aiBusy || notes.trim().length < 3}>
+            {aiBusy ? <span className="spinner" aria-hidden="true" /> : <span aria-hidden="true">✦</span>}
+            {aiBusy ? "Reading description…" : "Fill details with AI"}
+          </button>
+          {aiNote && <p className="hint-text" role="status">{aiNote}</p>}
         </div>
         <div className="field">
-          <label htmlFor="n-notes">Description</label>
-          <textarea id="n-notes" className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <label htmlFor="n-title">Title</label>
+          <input id="n-title" className="input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} required />
         </div>
         <div className="two">
           <div className="field">
@@ -116,7 +155,8 @@ export function NewTaskModal({ defaultAssignee, projectOptions, onClose }: Props
             <label htmlFor="n-htc">HTC</label>
             <select id="n-htc" className="select" value={htc} onChange={(e) => setHtc(e.target.value)}>
               <option value="">–</option>
-              {HTC_PRESETS.map((h) => <option key={h} value={h}>{fmtHours(h)}</option>)}
+              {htc !== "" && !HTC_PRESETS.includes(Number(htc)) && <option value={htc}>{fmtHours(Number(htc))}</option>}
+              {HTC_PRESETS.map((h) => <option key={h} value={String(h)}>{fmtHours(h)}</option>)}
             </select>
           </div>
           <div className="field">
